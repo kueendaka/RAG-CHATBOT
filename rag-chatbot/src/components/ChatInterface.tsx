@@ -5,7 +5,6 @@ import { useState } from 'react'
 interface Message {
   role: 'user' | 'assistant'
   content: string
-  sources?: string[]
 }
 
 export default function ChatInterface() {
@@ -30,7 +29,7 @@ export default function ChatInterface() {
       })
 
       const data = await response.json()
-      setMessages(prev => [...prev, { role: 'assistant', content: data.response, sources: data.sources }])
+      setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
     } catch (error) {
       console.error('Error:', error)
       setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }])
@@ -46,7 +45,8 @@ export default function ChatInterface() {
         <div className="h-96 overflow-y-auto mb-4 space-y-4 pr-4">
           {messages.length === 0 ? (
             <div className="text-center text-gray-400 mt-8">
-              Start a conversation with the RAG chatbot...
+              <p>Start a conversation with the RAG chatbot...</p>
+              <p className="text-sm mt-2 opacity-75">Try asking: "What is RAG?" or "How does it work?"</p>
             </div>
           ) : (
             messages.map((msg, idx) => (
@@ -62,16 +62,6 @@ export default function ChatInterface() {
                   }`}
                 >
                   <p className="whitespace-pre-wrap">{msg.content}</p>
-                  {msg.sources && msg.sources.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-white/20">
-                      <p className="text-xs opacity-75">Sources:</p>
-                      <ul className="list-disc list-inside text-xs">
-                        {msg.sources.map((source, i) => (
-                          <li key={i}>{source}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               </div>
             ))
