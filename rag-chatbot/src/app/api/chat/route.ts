@@ -35,38 +35,97 @@ function extractKeywords(text: string): string[] {
 function findRelevantContext(message: string, document: string, isMessageArabic: boolean): string {
   const keywords = extractKeywords(message)
   
-  // Split document into paragraphs (by double newlines or long text blocks)
-  const paragraphs = document.split(/\n{2,}|\r\n{2,}/).filter(p => p.trim().length > 30)
+  // Split document into chunks (lines or sentences)
+  // First try splitting by single newlines for shorter chunks
+  const lines = document.split(/\n/).filter(line => line.trim().length > 10)
   
-  const relevantParagraphs: { text: string; score: number }[] = []
+  const relevantChunks: { text: string; score: number }[] = []
   
-  for (const paragraph of paragraphs) {
-    let score = 0
-    const lowerParagraph = paragraph.toLowerCase()
+  // Combine consecutive lines into paragraphs of reasonable size
+  let currentChunk = ''
+  let chunkSize = 0
+  
+  for (const line of lines) {
+    const trimmedLine = line.trim()
     
-    // Count keyword matches
+    // Skip very short lines or header lines with only numbers
+    if (trimmedLine.length < 10 || /^\s*\d+\s*$/.test(trimmedLine)) {
+      continue
+    }
+    
+    currentChunk += trimmedLine + ' '
+    chunkSize++
+    
+    // Create chunks of 3-5 lines or if we hit a natural break
+    if (chunkSize >= 3 && (chunkSize >= 5 || trimmedLine.match(/[.!?]$/))) {
+      if (currentChunk.length > 20) {
+        const chunk = currentChunk.trim()
+        let score = 0
+        const lowerChunk = chunk.toLowerCase()
+        
+        // Count keyword matches
+        for (const keyword of keywords) {
+          if (lowerChunk.includes(keyword)) {
+            score += 1
+          }
+        }
+        
+        // Bonus for Arabic text if query is Arabic
+        if (isMessageArabic && isArabic(chunk)) {
+          score += 0.5
+        }
+        
+        if (score > 0) {
+          relevantChunks.push({ text: chunk, score })
+        }
+      }
+      
+      currentChunk = ''
+      chunkSize = 0
+    }
+  }
+  
+  // Handle remaining chunk
+  if (currentChunk.trim().length > 20) {
+    const chunk = currentChunk.trim()
+    let score = 0
+    const lowerChunk = chunk.toLowerCase()
+    
     for (const keyword of keywords) {
-      if (lowerParagraph.includes(keyword)) {
+      if (lowerChunk.includes(keyword)) {
         score += 1
       }
     }
     
-    // Bonus for Arabic text if query is Arabic
-    if (isMessageArabic && isArabic(paragraph)) {
+    if (isMessageArabic && isArabic(chunk)) {
       score += 0.5
     }
     
     if (score > 0) {
-      relevantParagraphs.push({ text: paragraph.trim(), score })
+      relevantChunks.push({ text: chunk, score })
     }
   }
   
   // Sort by score and get top results
-  relevantParagraphs.sort((a, b) => b.score - a.score)
+  relevantChunks.sort((a, b) => b.score - a.score)
   
-  if (relevantParagraphs.length > 0) {
-    // Return top 2 paragraphs
-    return relevantParagraphs.slice(0, 2).map(p => p.text).join('\n\n')
+  if (relevantChunks.length > 0) {
+    // Return top 3 chunks for better context
+    return relevantChunks.slice(0, 3).map(c => c.text).join('\n\n')
+  }
+  
+  // If no exact match, try broader search with single words
+  if (keywords.length > 0) {
+    for (const line of lines) {
+      if (line.trim().length > 20) {
+        const lowerLine = line.toLowerCase()
+        for (const keyword of keywords) {
+          if (lowerLine.includes(keyword)) {
+            return line.trim()
+          }
+        }
+      }
+    }
   }
   
   // Default response in appropriate language
