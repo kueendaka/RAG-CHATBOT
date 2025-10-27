@@ -7,6 +7,13 @@ interface Message {
   content: string
 }
 
+// Detect if text is primarily Arabic
+function isArabic(text: string): boolean {
+  const arabicRegex = /[\u0600-\u06FF]/
+  const matches = text.match(arabicRegex)
+  return matches ? matches.length > text.length * 0.3 : false
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -32,7 +39,10 @@ export default function ChatInterface() {
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
     } catch (error) {
       console.error('Error:', error)
-      setMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, I encountered an error. Please try again.' }])
+      const errorMsg = isArabic(input)
+        ? 'عذراً، حدث خطأ. يرجى المحاولة مرة أخرى.'
+        : 'Sorry, I encountered an error. Please try again.'
+      setMessages(prev => [...prev, { role: 'assistant', content: errorMsg }])
     } finally {
       setIsLoading(false)
     }
@@ -46,25 +56,35 @@ export default function ChatInterface() {
           {messages.length === 0 ? (
             <div className="text-center text-gray-400 mt-8">
               <p>Start a conversation with the RAG chatbot...</p>
-              <p className="text-sm mt-2 opacity-75">Try asking: "What is RAG?" or "How does it work?"</p>
+              <p className="text-sm mt-2 opacity-75">
+                ابدأ محادثة مع روبوت قياس / Start chatting with QIYAS bot
+              </p>
+              <p className="text-xs mt-2 opacity-60">
+                Available in English and Arabic / متاح بالعربية والإنجليزية
+              </p>
             </div>
           ) : (
-            messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+            messages.map((msg, idx) => {
+              const isMsgArabic = isArabic(msg.content)
+              return (
                 <div
-                  className={`max-w-[80%] rounded-lg p-4 ${
-                    msg.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-white'
-                  }`}
+                  key={idx}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                  <div
+                    className={`max-w-[80%] rounded-lg p-4 ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-white'
+                    } ${isMsgArabic ? 'text-right rtl' : 'text-left'}`}
+                  >
+                    <p className={`whitespace-pre-wrap ${isMsgArabic ? 'font-arabic' : ''}`}>
+                      {msg.content}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))
+              )
+            })
           )}
         </div>
 
@@ -74,7 +94,8 @@ export default function ChatInterface() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question..."
+            placeholder="اسأل سؤالاً... / Ask a question..."
+            dir="auto"
             className="flex-1 px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
             disabled={isLoading}
           />

@@ -1,26 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server'
+import fs from 'fs'
+import path from 'path'
 
-// Mock knowledge base for testing
-const knowledgeBase: { [key: string]: string } = {
-  'what is rag': 'RAG stands for Retrieval-Augmented Generation. It\'s a technique that enhances AI responses by retrieving relevant information from a knowledge base before generating an answer. This makes the AI more accurate and contextually aware.',
-  'how does it work': 'RAG works by first converting documents into embeddings (vector representations), then when a question is asked, it searches for similar content in the knowledge base, and finally uses that retrieved context along with the question to generate a comprehensive answer.',
-  'what are the benefits': 'RAG provides several benefits: it gives more accurate and up-to-date information by grounding responses in actual data, allows the AI to cite sources, reduces hallucinations, and enables the system to work with proprietary or domain-specific knowledge.',
-  'vector database': 'A vector database stores information as high-dimensional vectors (embeddings) that capture semantic meaning. This allows for semantic search, where you can find relevant information based on meaning rather than just exact keyword matches.',
-  'embeddings': 'Embeddings are numerical representations of text that capture semantic meaning. Similar texts have similar embedding vectors, which is why they can be used for semantic search and finding relevant information.',
-  'llm': 'LLM stands for Large Language Model. These are AI models trained on vast amounts of text that can understand and generate human-like text. Examples include GPT-4, Claude, and Llama models.',
+// Load QIYAS document content
+function loadQIYASDocument(): string {
+  try {
+    const filePath = path.join(process.cwd(), 'src', 'data', 'qiyas_text.txt')
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return content
+  } catch (error) {
+    console.error('Error loading QIYAS document:', error)
+    return ''
+  }
 }
 
-// Simple similarity search (keyword-based for demo)
-function findRelevantContext(message: string): string {
-  const lowerMessage = message.toLowerCase()
+// Detect if text is primarily Arabic
+function isArabic(text: string): boolean {
+  const arabicRegex = /[\u0600-\u06FF]/
+  const matches = text.match(arabicRegex)
+  return matches ? matches.length > text.length * 0.3 : false
+}
+
+// Extract keywords from text
+function extractKeywords(text: string): string[] {
+  // Remove special characters and split by spaces
+  const words = text.toLowerCase()
+    .replace(/[^\w\s\u0600-\u06FF]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2)
+  return words
+}
+
+// Find relevant context in document
+function findRelevantContext(message: string, document: string, isMessageArabic: boolean): string {
+  const keywords = extractKeywords(message)
   
-  for (const [key, value] of Object.entries(knowledgeBase)) {
-    if (lowerMessage.includes(key)) {
-      return value
+  // Split document into paragraphs (by double newlines or long text blocks)
+  const paragraphs = document.split(/\n{2,}|\r\n{2,}/).filter(p => p.trim().length > 30)
+  
+  const relevantParagraphs: { text: string; score: number }[] = []
+  
+  for (const paragraph of paragraphs) {
+    let score = 0
+    const lowerParagraph = paragraph.toLowerCase()
+    
+    // Count keyword matches
+    for (const keyword of keywords) {
+      if (lowerParagraph.includes(keyword)) {
+        score += 1
+      }
+    }
+    
+    // Bonus for Arabic text if query is Arabic
+    if (isMessageArabic && isArabic(paragraph)) {
+      score += 0.5
+    }
+    
+    if (score > 0) {
+      relevantParagraphs.push({ text: paragraph.trim(), score })
     }
   }
   
-  return 'I can help you understand RAG systems, vector databases, embeddings, and related AI/ML concepts. Please ask me a more specific question.'
+  // Sort by score and get top results
+  relevantParagraphs.sort((a, b) => b.score - a.score)
+  
+  if (relevantParagraphs.length > 0) {
+    // Return top 2 paragraphs
+    return relevantParagraphs.slice(0, 2).map(p => p.text).join('\n\n')
+  }
+  
+  // Default response in appropriate language
+  if (isMessageArabic) {
+    return 'يمكنني مساعدتك بمعلومات عن قياس (QIYAS) - المركز الوطني للقياس في المملكة العربية السعودية. يرجى طرح أسئلة حول خدماتهم أو إجراءاتهم أو تقييماتهم.'
+  } else {
+    return 'I can help you with information about QIYAS (قِيَاس) - the Saudi Arabia national exam center. Please ask about their services, procedures, or assessments.'
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -34,18 +88,30 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Detect if message is in Arabic
+    const isMessageArabic = isArabic(message)
+    
+    // Load QIYAS document
+    const document = loadQIYASDocument()
+    
+    if (!document) {
+      const errorMessage = isMessageArabic 
+        ? 'عذراً، لا يمكنني الوصول إلى وثيقة قياس في الوقت الحالي. يرجى المحاولة مرة أخرى لاحقاً.'
+        : 'Sorry, I am unable to access the QIYAS document at the moment. Please try again later.'
+      
+      return NextResponse.json({
+        response: errorMessage,
+      })
+    }
+
     // Simulate processing delay
     await new Promise(resolve => setTimeout(resolve, 500))
     
-    // Get relevant context from knowledge base
-    const context = findRelevantContext(message)
-    
-    // Generate a response (in production, this would use Groq API)
-    const response = `${context}`
+    // Get relevant context from document
+    const context = findRelevantContext(message, document, isMessageArabic)
     
     return NextResponse.json({
-      response,
-      // Remove sources for cleaner display
+      response: context,
     })
   } catch (error) {
     console.error('Chat API error:', error)
