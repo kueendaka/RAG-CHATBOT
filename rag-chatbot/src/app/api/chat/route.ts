@@ -136,6 +136,35 @@ function findRelevantContext(message: string, document: string, isMessageArabic:
   }
 }
 
+// Handle conversational messages
+function handleConversationalMessage(message: string, isArabic: boolean): string | null {
+  const lowerMessage = message.toLowerCase().trim()
+  
+  // Greetings
+  const greetings = ['hi', 'hello', 'hey', 'مرحبا', 'السلام عليكم', 'أهلا', 'هلا']
+  if (greetings.some(g => lowerMessage.includes(g))) {
+    return isArabic 
+      ? 'مرحباً! كيف يمكنني مساعدتك اليوم؟'
+      : 'Hello! How can I help you today?'
+  }
+  
+  // How are you responses
+  if (lowerMessage.includes('how are you') || lowerMessage.includes('كيف حالك')) {
+    return isArabic
+      ? 'أنا بخير، شكراً لك! كيف يمكنني مساعدتك بمعلومات عن قياس؟'
+      : "I'm doing well, thank you! How can I help you with information about QIYAS?"
+  }
+  
+  // Thanks
+  if (lowerMessage.includes('thank') || lowerMessage.includes('thanks') || lowerMessage.includes('شكرا')) {
+    return isArabic
+      ? 'عفواً! هل تحتاج مساعدة أخرى؟'
+      : "You're welcome! Is there anything else you need help with?"
+  }
+  
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { message } = await request.json()
@@ -149,6 +178,14 @@ export async function POST(request: NextRequest) {
 
     // Detect if message is in Arabic
     const isMessageArabic = isArabic(message)
+    
+    // Check if it's a conversational message first
+    const conversationalResponse = handleConversationalMessage(message, isMessageArabic)
+    if (conversationalResponse) {
+      return NextResponse.json({
+        response: conversationalResponse,
+      })
+    }
     
     // Load QIYAS document
     const document = loadQIYASDocument()
